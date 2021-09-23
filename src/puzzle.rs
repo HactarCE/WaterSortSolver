@@ -1,9 +1,20 @@
-use itertools::Itertools;
+use itertools::{iproduct, Itertools};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
 use std::fmt;
 
-#[derive(Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct Move {
+    pub from: usize,
+    pub to: usize,
+}
+impl fmt::Display for Move {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:>2} -> {:<2}", self.from + 1, self.to + 1)
+    }
+}
+
+#[derive(Default, Clone, PartialEq, Eq, Hash)]
 pub struct Puzzle(pub Vec<Vial>);
 impl fmt::Debug for Puzzle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -40,9 +51,37 @@ impl Puzzle {
         }
         self.0.last_mut().unwrap()
     }
+
+    pub fn do_move(&self, m: Move) -> Result<Self, &'static str> {
+        if m.from >= self.0.len() || m.to >= self.0.len() {
+            return Err("vial index out of range");
+        }
+        let from = self.0[m.from];
+        let to = self.0[m.to];
+        let (from, to) = from.pour_into(to)?;
+        let mut ret = self.clone();
+        ret.0[m.from] = from;
+        ret.0[m.to] = to;
+        Ok(ret)
+    }
+
+    pub fn gen_all_moves<'a>(&'a self) -> impl 'a + Iterator<Item = (Move, Self)> {
+        iproduct!(0..self.0.len(), 0..self.0.len())
+            .map(|(from, to)| Move { from, to })
+            .filter(|m| m.from != m.to) // Don't move into the same vial.
+            .filter(move |m| !self.0[m.from].is_solved() && !self.0[m.to].is_solved()) // Don't mess with solved vials.
+            .filter_map(move |m| Some((m, self.do_move(m).ok()?)))
+    }
+    pub fn is_solved(&self) -> bool {
+        self.0.iter().all(|v| v.is_solved_or_empty())
+    }
+
+    pub fn vials_solved(&self) -> usize {
+        self.0.iter().filter(|v| v.is_solved_or_empty()).count()
+    }
 }
 
-#[derive(Default, Copy, Clone, PartialEq, Eq)]
+#[derive(Default, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Vial(pub [Option<Color>; 4]);
 impl fmt::Debug for Vial {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -97,13 +136,12 @@ impl Vial {
         Ok(self)
     }
     pub fn push_color(mut self, color: Color) -> Result<Self, &'static str> {
-        if let Some(c) = self.top_color() {
-            if c != color {
-                return Err("top color does not match");
-            }
+        if self.is_empty() || self.top_color() == Some(color) {
+            *self.first_empty_slot()? = Some(color);
+            Ok(self)
+        } else {
+            Err("top color does not match")
         }
-        *self.last_full_slot()? = Some(color);
-        Ok(self)
     }
     pub fn pop(mut self) -> Result<Self, &'static str> {
         *self.last_full_slot()? = None;
@@ -126,6 +164,16 @@ impl Vial {
         }
         Ok((self, other))
     }
+
+    pub fn is_solved(self) -> bool {
+        self.is_solved_or_empty() && self.0[0].is_some()
+    }
+    pub fn is_empty(self) -> bool {
+        self.is_solved_or_empty() && self.0[0].is_none()
+    }
+    pub fn is_solved_or_empty(self) -> bool {
+        self.0.iter().all_equal()
+    }
 }
 
 pub const COLORS: &[Color] = &[
@@ -140,7 +188,7 @@ pub const COLORS: &[Color] = &[
     Color::Red,
 ];
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, TryFromPrimitive, IntoPrimitive)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, TryFromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 pub enum Color {
     Cornflower,

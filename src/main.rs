@@ -2,6 +2,7 @@ use crossterm::{cursor, terminal, ExecutableCommand, QueueableCommand, Result};
 
 mod draw;
 mod puzzle;
+mod solver;
 mod ui;
 
 fn main() -> Result<()> {
@@ -23,7 +24,11 @@ fn app() -> Result<()> {
         println!("now solving this puzzle:");
         println!("{}", p.ser());
 
-        // solve_puzzle();
+        let moves = solver::solve(p).unwrap();
+        println!("solved!");
+        for m in moves {
+            println!("{}", m);
+        }
     } else {
         println!("canceled");
     }
