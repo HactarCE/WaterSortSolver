@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::io::Write;
 
 use crossterm::{cursor, event, terminal, QueueableCommand, Result};
@@ -9,10 +10,20 @@ use crate::puzzle::{Puzzle, COLORS};
 pub fn input_puzzle() -> Result<Option<Puzzle>> {
     const OPTION_CHARS: &str = "1234567890QWERTYUIOPASDFGHJKLZXCVBNM";
 
-    let options = OPTION_CHARS
-        .chars()
-        .zip(COLORS.iter().copied())
-        .collect_vec();
+    let mut options = vec![];
+    {
+        let mut used_chars = HashSet::new();
+        for &color in COLORS {
+            for c in (color.simple_name().to_string() + color.name() + OPTION_CHARS).chars() {
+                let c = c.to_ascii_uppercase();
+                if !used_chars.contains(&c) {
+                    used_chars.insert(c);
+                    options.push((c, color));
+                    break;
+                }
+            }
+        }
+    }
 
     let mut puzzle = Puzzle::new();
     if let Some(serialized) = std::env::args().skip(1).next() {
